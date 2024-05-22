@@ -4,6 +4,9 @@ from datetime import datetime, timedelta
 from config import DATA_FILE, DEFAULT_LANGUAGE
 
 def load_data():
+    """
+    Загрузка данных из файла.
+    """
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'rb') as f:
             data = pickle.load(f)
@@ -18,10 +21,16 @@ def load_data():
         }
 
 def save_data(data):
+    """
+    Сохранение данных в файл.
+    """
     with open(DATA_FILE, 'wb') as f:
         pickle.dump(data, f)
 
 def reset_old_days(data):
+    """
+    Сброс данных за старые дни.
+    """
     today = datetime.now().date()
     for i in range(8, 15):
         old_day = str(today - timedelta(days=i))
@@ -34,6 +43,9 @@ def reset_old_days(data):
     save_data(data)
 
 def update_daily_totals(data, team, value):
+    """
+    Обновление ежедневных итогов.
+    """
     today = str(datetime.now().date())
     if today not in data['daily_totals']:
         data['daily_totals'][today] = {i: 0 for i in range(1, 7)}

@@ -26,10 +26,11 @@ def get_user_language(user_id):
 # Функция для создания клавиатуры
 def create_main_keyboard(language):
     keyboard = [
-        [KeyboardButton(text=get_text(language, 'add_points'))],
         [KeyboardButton(text=get_text(language, 'today_score'))],
-        [KeyboardButton(text=get_text(language, 'reset_score'))],
-        [KeyboardButton(text=get_text(language, 'day_score'))]
+        [KeyboardButton(text=get_text(language, 'add_points'))],
+        [KeyboardButton(text=get_text(language, 'remove_points'))],
+        [KeyboardButton(text=get_text(language, 'day_score'))],
+        [KeyboardButton(text=get_text(language, 'reset_score'))]
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
@@ -44,8 +45,7 @@ def create_team_buttons(language):
 # Функция для создания inline-кнопок для добавления очков
 def create_points_buttons(team):
     keyboard = [
-        [InlineKeyboardButton(text=f'+{i}', callback_data=f'add_{i}_points_to_{team}') for i in [10, 20]],
-        [InlineKeyboardButton(text=f'+{i}', callback_data=f'add_{i}_points_to_{team}') for i in [50, 100]]
+        [InlineKeyboardButton(text='Ввести количество очков', callback_data=f'enter_points_{team}')]
     ]
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
@@ -76,6 +76,29 @@ async def process_team_callback(callback_query: types.CallbackQuery):
     language = get_user_language(callback_query.from_user.id)
     await bot.send_message(callback_query.from_user.id, get_text(language, 'choose_points', team=get_team_name(language, team)), reply_markup=create_points_buttons(team))
 
+# Обработчик для ввода количества очков
+@dp.callback_query(lambda c: c.data.startswith('enter_points_'))
+async def enter_points_callback(callback_query: types.CallbackQuery):
+    team = int(callback_query.data.split('_')[-1])
+    language = get_user_language(callback_query.from_user.id)
+    await bot.send_message(callback_query.from_user.id, get_text(language, 'enter_points'))
+    await bot.send_message(callback_query.from_user.id, get_text(language, 'enter_points'), reply_markup=types.ForceReply(selective=True))
+    dp.register_message_handler(process_entered_points, state='*', team=team)
+
+# Обработчик для обработки введенных очков
+async def process_entered_points(message: Message, team):
+    try:
+        points = int(message.text)
+        language = get_user_language(message.from_user.id)
+        today = str(datetime.now().date())
+        if today not in data['daily_totals']:
+            data['daily_totals'][today] = {i: 0 for i in range(1, 7)}
+        data['daily_totals'][today][team] += points
+        save_data(data)
+        await message.answer(get_text(language, 'points_added', team=get_team_name(language, team), points=data["daily_totals"][today][team]))
+    except ValueError:
+        await message.answer(get_text(language, 'invalid_number'))
+
 # Обработчик для добавления очков команде
 @dp.callback_query(lambda c: c.data.startswith('add_') and '_points_to_' in c.data)
 async def process_points_callback(callback_query: types.CallbackQuery):
@@ -89,6 +112,20 @@ async def process_points_callback(callback_query: types.CallbackQuery):
     data['daily_totals'][today][team_number] += points
     save_data(data)
     await bot.send_message(callback_query.from_user.id, get_text(language, 'points_added', team=get_team_name(language, team_number), points=data["daily_totals"][today][team_number]))
+
+# Обработчик для отнимания очков у команды
+@dp.callback_query(lambda c: c.data.startswith('remove_') and '_points_from_' in c.data)
+async def process_remove_points_callback(callback_query: types.CallbackQuery):
+    parts = callback_query.data.split('_')
+    points = int(parts[1])
+    team_number = int(parts[-1])
+    language = get_user_language(callback_query.from_user.id)
+    today = str(datetime.now().date())
+    if today not in data['daily_totals']:
+        data['daily_totals'][today] = {i: 0 for i in range(1, 7)}
+    data['daily_totals'][today][team_number] -= points
+    save_data(data)
+    await bot.send_message(callback_query.from_user.id, get_text(language, 'points_removed', team=get_team_name(language, team_number), points=data["daily_totals"][today][team_number]))
 
 # Обработчик для отображения счета на сегодня
 @dp.message(lambda message: message.text in [get_text(get_user_language(message.from_user.id), 'today_score')])
